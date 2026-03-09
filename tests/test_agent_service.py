@@ -5,6 +5,9 @@ from app.services import agent_service
 
 
 class AgentServiceTests(unittest.TestCase):
+    def setUp(self):
+        agent_service._graph = None
+
     def test_list_files_tool(self):
         with patch("app.services.agent_service.file_service.list_files") as list_files:
             list_files.return_value = [
@@ -117,16 +120,93 @@ class AgentServiceTests(unittest.TestCase):
         self.assertTrue(result["used_kb"])
         self.assertEqual(result["steps"][0]["tool"], "search_kb")
 
-    def test_web_search_stub(self):
-        result = agent_service._tool_execute(
-            "proj1",
-            "search the web",
-            {"tool_name": "web_search", "tool_args": {"query": "latest news"}},
-        )
+    def test_web_search_tool(self):
+        with patch("app.services.agent_service._search_web") as search_web, patch(
+            "app.services.agent_service.llm_service.answer_with_context"
+        ) as answer_with_context:
+            search_web.return_value = (
+                [
+                    {
+                        "title": "Latest AI News",
+                        "link": "https://example.com/news",
+                        "snippet": "Top updates today",
+                        "position": 1,
+                    }
+                ],
+                None,
+            )
+            answer_with_context.return_value = "web-based answer"
+
+            result = agent_service._tool_execute(
+                "proj1",
+                "search the web",
+                {"tool_name": "web_search", "tool_args": {"query": "latest news"}},
+            )
 
         self.assertIsNotNone(result)
-        self.assertIn("stub", result["content"].lower())
+        self.assertEqual(result["content"], "web-based answer")
+        self.assertEqual(result["citations"][0]["source"], "Latest AI News")
         self.assertEqual(result["steps"][0]["tool"], "web_search")
+
+    def test_search_web_requires_serpapi_key(self):
+        with patch("app.services.agent_service.SERPAPI_KEY", None):
+            results, error = agent_service._search_web("latest news")
+
+        self.assertIsNone(results)
+        self.assertIn("SERPAPI_KEY", error)
+
+    def test_run_tool_call_supports_multi_round(self):
+        with patch("app.services.agent_service.decide_tool") as decide_tool, patch(
+            "app.services.agent_service._tool_execute"
+        ) as tool_execute:
+            decide_tool.side_effect = [
+                {"action": "tool", "tool_name": "list_files", "tool_args": {}},
+                {"action": "final", "response": "已完成，两步信息已整合"},
+            ]
+            tool_execute.return_value = {
+                "content": "Uploaded files:\n- notes.md",
+                "citations": [],
+                "used_kb": False,
+                "steps": [
+                    {
+                        "type": "tool_call",
+                        "tool": "list_files",
+                        "args": {},
+                        "result": "Uploaded files: - notes.md",
+                    }
+                ],
+            }
+
+            result = agent_service.run_tool_call("proj1", "先列文件再给我结论")
+
+        self.assertEqual(result["content"], "已完成，两步信息已整合")
+        self.assertEqual(len(result["steps"]), 1)
+        self.assertEqual(result["steps"][0]["tool"], "list_files")
+
+    def test_run_tool_call_respects_round_limit(self):
+        with patch("app.services.agent_service.decide_tool") as decide_tool, patch(
+            "app.services.agent_service._tool_execute"
+        ) as tool_execute:
+            decide_tool.return_value = {"action": "tool", "tool_name": "list_files", "tool_args": {}}
+            tool_execute.return_value = {
+                "content": "Uploaded files:\n- notes.md",
+                "citations": [],
+                "used_kb": False,
+                "steps": [
+                    {
+                        "type": "tool_call",
+                        "tool": "list_files",
+                        "args": {},
+                        "result": "Uploaded files: - notes.md",
+                    }
+                ],
+            }
+
+            result = agent_service.run_tool_call("proj1", "重复执行")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(tool_execute.call_count, agent_service.MAX_TOOL_ROUNDS)
+        self.assertEqual(len(result["steps"]), agent_service.MAX_TOOL_ROUNDS)
 
 
 if __name__ == "__main__":

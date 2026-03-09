@@ -2,6 +2,11 @@
 from typing import Dict, Any, Optional, List, TypedDict
 from langgraph.graph import StateGraph, END
 from app.services import file_service, kb_service, llm_service
+import os
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 TOOLS_SPEC = [
     {
@@ -36,10 +41,14 @@ TOOLS_SPEC = [
     },
     {
         "name": "web_search",
-        "description": "Stub for web search. Returns a placeholder response.",
+        "description": "Search the web via SerpAPI and answer with cited results.",
         "args": {"query": "string"}
     }
 ]
+
+MAX_TOOL_ROUNDS = 3
+SERPAPI_KEY = os.getenv('SERPAPI_KEY')
+SERPAPI_API_URL = 'https://serpapi.com/search.json'
 
 SUMMARY_KEYWORDS = ["summary", "summarize"]
 OUTLINE_KEYWORDS = ["outline"]
@@ -53,6 +62,10 @@ class AgentState(TypedDict, total=False):
     project_id: str
     decision: Dict[str, Any]
     tool_result: Dict[str, Any]
+    tool_rounds: int
+    steps: List[Dict[str, Any]]
+    citations: List[Dict[str, Any]]
+    used_kb: bool
     final: Dict[str, Any]
 
 def _summarize_result(text: str, limit: int = 160) -> str:
@@ -83,16 +96,21 @@ def _clean_json(text: str) -> str:
     return text
 
 
-def decide_tool(query: str) -> Optional[Dict[str, Any]]:
+def decide_tool(query: str, tool_steps: Optional[List[Dict[str, Any]]] = None) -> Optional[Dict[str, Any]]:
+    previous_steps = tool_steps or []
     system_prompt = (
         "You are a tool selector. Choose an appropriate tool for the user query, "
-        "or respond directly.\\n\\n"
+        "or respond directly. You can do multiple tool calls if needed.\\n\\n"
         "Available tools:\\n" + json.dumps(TOOLS_SPEC, ensure_ascii=False) + "\\n\\n"
+        "If previous tool results already answer the user, return action=final.\\n"
         "Return JSON only, no Markdown.\\n"
         "Format: {\\\"action\\\": \\\"tool\\\"|\\\"final\\\", \\\"tool_name\\\": \\\"...\\\", "
         "\\\"tool_args\\\": {...}, \\\"response\\\": \\\"...\\\"}"
     )
-    user_prompt = f"User query: {query}"
+    user_prompt = (
+        f"User query: {query}\\n\\n"
+        f"Previous tool steps (if any): {json.dumps(previous_steps, ensure_ascii=False)}"
+    )
 
     result = llm_service.call_llm([
         {"role": "system", "content": system_prompt},
@@ -298,23 +316,115 @@ def _tool_execute(project_id: str, query: str, decision: Dict[str, Any]) -> Opti
 
     if tool_name == 'web_search':
         query_text = tool_args.get('query') or query
+        if not query_text:
+            return _with_steps({
+                'content': 'Please provide a query for web search.',
+                'citations': [],
+                'used_kb': False
+            }, tool_name, tool_args)
+
+        results, error = _search_web(query_text)
+        if error:
+            return _with_steps({
+                'content': error,
+                'citations': [],
+                'used_kb': False
+            }, tool_name, tool_args)
+
+        if not results:
+            return _with_steps({
+                'content': 'No relevant web results were found.',
+                'citations': [],
+                'used_kb': False
+            }, tool_name, tool_args)
+
+        context_parts = []
+        for item in results[:5]:
+            title = item.get('title', '')
+            link = item.get('link', '')
+            snippet = item.get('snippet', '')
+            context_parts.append(f"[Title: {title}]\\n[URL: {link}]\\n{snippet}")
+        context = "\\n\\n---\\n\\n".join(context_parts)
+
+        answer = llm_service.answer_with_context(query_text, context, None)
+        citations = [{
+            'source': item.get('title') or item.get('link'),
+            'url': item.get('link'),
+            'score': item.get('position')
+        } for item in results[:5]]
+
+        if not answer:
+            lines = [f"- {item.get('title')} ({item.get('link')})" for item in results[:5]]
+            answer = "Web results:\n" + "\n".join(lines)
+
         return _with_steps({
-            'content': f'[stub] Web search not implemented yet. Query: {query_text}',
-            'citations': [],
+            'content': answer,
+            'citations': citations,
             'used_kb': False
         }, tool_name, tool_args)
 
     return None
 
 
+def _search_web(query: str, num_results: int = 5):
+    if not SERPAPI_KEY:
+        return None, 'SERPAPI_KEY is not set. Please configure it in .env.'
+
+    params = {
+        'engine': 'google',
+        'q': query,
+        'api_key': SERPAPI_KEY,
+        'num': num_results,
+        'hl': 'zh-cn'
+    }
+
+    try:
+        response = requests.get(SERPAPI_API_URL, params=params, timeout=20)
+        response.raise_for_status()
+        payload = response.json()
+    except requests.exceptions.RequestException as exc:
+        return None, f'Web search failed: {exc}'
+
+    return payload.get('organic_results') or [], None
+
+
 def _decide_node(state: AgentState) -> AgentState:
-    decision = decide_tool(state['query'])
+    steps = state.get('steps', [])
+    decision = decide_tool(state['query'], steps)
     if decision:
+        if decision.get('action') == 'tool' and state.get('tool_rounds', 0) >= MAX_TOOL_ROUNDS:
+            last_result = state.get('tool_result') or {}
+            state['final'] = {
+                'content': last_result.get('content') or 'Reached tool-call limit. Please refine your request.',
+                'citations': state.get('citations', []),
+                'used_kb': state.get('used_kb', False),
+                'steps': steps
+            }
+            return state
+
+        if decision.get('action') == 'final':
+            state['final'] = {
+                'content': decision.get('response') or 'Done.',
+                'citations': state.get('citations', []),
+                'used_kb': state.get('used_kb', False),
+                'steps': steps
+            }
+            return state
+
         state['decision'] = decision
+    elif state.get('tool_result'):
+        state['final'] = {
+            'content': state['tool_result'].get('content', 'Sorry, I cannot generate a response right now.'),
+            'citations': state.get('citations', []),
+            'used_kb': state.get('used_kb', False),
+            'steps': steps
+        }
     return state
 
 
 def _route(state: AgentState) -> str:
+    if state.get('final'):
+        return END
     decision = state.get('decision') or {}
     if decision.get('action') == 'tool':
         return 'tool'
@@ -326,13 +436,10 @@ def _tool_node(state: AgentState) -> AgentState:
     result = _tool_execute(state['project_id'], state['query'], decision)
     if result:
         state['tool_result'] = result
-    return state
-
-
-def _respond_node(state: AgentState) -> AgentState:
-    result = state.get('tool_result')
-    if result:
-        state['final'] = result
+        state['tool_rounds'] = state.get('tool_rounds', 0) + 1
+        state['steps'] = state.get('steps', []) + result.get('steps', [])
+        state['citations'] = result.get('citations', [])
+        state['used_kb'] = state.get('used_kb', False) or result.get('used_kb', False)
     return state
 
 
@@ -345,11 +452,9 @@ def _get_graph():
     builder = StateGraph(AgentState)
     builder.add_node('decide', _decide_node)
     builder.add_node('tool', _tool_node)
-    builder.add_node('respond', _respond_node)
     builder.set_entry_point('decide')
     builder.add_conditional_edges('decide', _route, {'tool': 'tool', END: END})
-    builder.add_edge('tool', 'respond')
-    builder.add_edge('respond', END)
+    builder.add_edge('tool', 'decide')
     _graph = builder.compile()
     return _graph
 

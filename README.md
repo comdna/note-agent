@@ -5,7 +5,7 @@
 - 项目级会话管理
 - 普通文件上传、读取、更新、删除
 - PDF 知识库检索问答（RAG）
-- Agent 工具调度（文件工具 / 知识库工具 / Web 搜索占位）
+- Agent 工具调度（文件工具 / 知识库工具 / Web 搜索）
 - 流式回复、引用来源、提案式文件修改（Apply/Reject）
 - 会话级“背景文件”上下文（可指定普通文本文件作为持续参考）
 
@@ -30,7 +30,7 @@
 
 ### 4) Agent 与意图识别
 - 基于 LLM 的意图分类
-- LangGraph 工作流：`decide -> tool -> respond`
+- LangGraph 工作流：`decide <-> tool` 多轮，直到 `final`
 - 工具结果可回传步骤（tool steps），便于可解释
 
 ### 5) 会话背景文件
@@ -98,6 +98,7 @@ pip install -e .
 
 ```env
 DEEPSEEK_API_KEY=your_api_key_here
+SERPAPI_KEY=your_serpapi_key_here
 SECRET_KEY=your_secret_key_here
 ```
 
@@ -138,5 +139,3 @@ python -m unittest tests/test_chat_background_context.py
 ```
 
 ---
-
-
