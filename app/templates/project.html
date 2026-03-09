@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ project.name }} - Note Agent</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>📚 Note Agent</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/" class="nav-item">
+                    <span class="icon">🏠</span>
+                    <span>项目列表</span>
+                </a>
+                <a href="/project/{{ project.id }}" class="nav-item active">
+                    <span class="icon">📁</span>
+                    <span>{{ project.name }}</span>
+                </a>
+            </nav>
+            <div class="sidebar-section">
+                <h3>笔记列表</h3>
+                <div id="notes-list" class="notes-list"></div>
+                <button class="btn btn-primary btn-block" onclick="showCreateNoteModal()">
+                    + 新建笔记
+                </button>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <header class="content-header">
+                <h1 id="current-note-title">选择或创建一个笔记</h1>
+                <div class="header-actions" id="note-actions" style="display: none;">
+                    <button class="btn btn-secondary" onclick="generateSummary()">生成摘要</button>
+                    <button class="btn btn-secondary" onclick="generateOutline()">生成大纲</button>
+                    <button class="btn btn-secondary" onclick="generateFlashcards()">学习卡片</button>
+                    <button class="btn btn-secondary" onclick="generateQuiz()">生成练习</button>
+                    <button class="btn btn-danger" onclick="deleteCurrentNote()">删除笔记</button>
+                </div>
+            </header>
+
+            <div class="content-body">
+                <div id="note-editor-container" class="note-editor-container">
+                    <div class="editor-placeholder">
+                        <p>👈 从左侧选择一个笔记，或创建新笔记开始</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- AI 助手面板 -->
+        <aside class="ai-panel">
+            <div class="ai-panel-header">
+                <h3>🤖 AI 助手</h3>
+            </div>
+            <div id="chat-messages" class="chat-messages"></div>
+            <div class="chat-input-container">
+                <input type="text" id="chat-input" placeholder="输入问题..." onkeypress="handleChatKeypress(event)">
+                <button class="btn btn-primary" onclick="sendMessage()">发送</button>
+            </div>
+        </aside>
+    </div>
+
+    <!-- 创建笔记模态框 -->
+    <div id="create-note-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>新建笔记</h3>
+                <span class="close" onclick="closeCreateNoteModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>笔记标题</label>
+                    <input type="text" id="new-note-title" placeholder="输入笔记标题">
+                </div>
+                <div class="form-group">
+                    <label>笔记类型</label>
+                    <select id="new-note-type">
+                        <option value="markdown">Markdown</option>
+                        <option value="text">纯文本</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeCreateNoteModal()">取消</button>
+                <button class="btn btn-primary" onclick="createNote()">创建</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const projectId = '{{ project.id }}';
+    </script>
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/editor.js"></script>
+</body>
+</html>

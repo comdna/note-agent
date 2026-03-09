@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目工作台 - Note Agent</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/project.css') }}">
+</head>
+<body data-project-id="{{ project_id }}">
+    <div class="app-container project-layout">
+        <!-- 顶部导航 -->
+        <header class="top-bar">
+            <div class="logo">
+                <a href="{{ url_for('main.index') }}" class="back-link">←</a>
+                <span class="logo-icon">📝</span>
+                <span class="logo-text">Note Agent</span>
+            </div>
+            <div class="project-title" id="project-title">加载中...</div>
+            <div class="top-actions">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="web-search-toggle">
+                    <span class="toggle-label">联网搜索</span>
+                </label>
+            </div>
+        </header>
+
+        <!-- 三栏工作台 -->
+        <div class="workspace">
+            <!-- 左侧：项目导航 -->
+            <aside class="left-panel">
+                <div class="panel-tabs">
+                    <button class="tab-btn active" data-tab="files">普通文件</button>
+                    <button class="tab-btn" data-tab="chats">会话</button>
+                </div>
+                
+                <div class="panel-content">
+                    <!-- 文件列表 -->
+                    <div id="files-tab" class="tab-content active">
+                        <div class="panel-toolbar">
+                            <button class="btn-icon" onclick="showUploadModal()" title="上传普通文件">+</button>
+                            <button class="btn-icon" onclick="refreshFiles()" title="刷新">↻</button>
+                        </div>
+                        <div id="file-list" class="file-tree">
+                            <div class="empty-state">暂无文件</div>
+                        </div>
+                        <div class="panel-hint">
+                            <small>支持: txt, md, json, py, js, html, css, jpg, png</small>
+                        </div>
+                    </div>
+                    
+                    <!-- 会话列表 -->
+                    <div id="chats-tab" class="tab-content">
+                        <div class="panel-toolbar">
+                            <button class="btn-icon" onclick="createNewChat()" title="新会话">+</button>
+                        </div>
+                        <div id="chat-list" class="chat-list">
+                            <div class="empty-state">暂无会话</div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- 中栏：预览 + 聊天 -->
+            <main class="center-panel">
+                <!-- 文件预览区 -->
+                <div id="preview-area" class="preview-area">
+                    <div class="preview-placeholder">
+                        <div class="placeholder-icon">📄</div>
+                        <p>选择左侧文件开始预览</p>
+                    </div>
+                </div>
+                
+                <!-- 聊天区 -->
+                <div class="chat-panel">
+                    <div id="chat-messages" class="chat-messages">
+                        <div class="welcome-message">
+                            <h3>👋 欢迎来到项目工作台</h3>
+                            <p>你可以问我关于项目资料的问题，或让我帮你整理笔记</p>
+                            <p class="hint-text">💡 提示：上传PDF到右侧知识库后，可以直接询问文档内容</p>
+                        </div>
+                    </div>
+                    <div class="chat-input-area">
+                        <div class="input-toolbar">
+                            <button class="btn-icon" onclick="showFileSelector()" title="引用文件">📎</button>
+                            <button class="btn-icon" onclick="clearChat()" title="清空对话">🗑️</button>
+                        </div>
+                        <div class="input-box">
+                            <textarea id="chat-input" placeholder="输入你的问题...（例如：我的资料里讲了什么？）" rows="3"></textarea>
+                            <button class="btn-send" onclick="sendMessage()">➤</button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- 右侧：检查器 -->
+            <aside class="right-panel">
+                <div class="panel-tabs">
+                    <button class="tab-btn active" data-tab="info">项目</button>
+                    <button class="tab-btn" data-tab="kb">知识库</button>
+                    <button class="tab-btn" data-tab="versions">版本</button>
+                </div>
+                
+                <div class="panel-content">
+                    <!-- 项目信息 -->
+                    <div id="info-tab" class="tab-content active">
+                        <div class="info-section">
+                            <h4>项目信息</h4>
+                            <div id="project-info">
+                                <p>ID: <span id="project-id-display">{{ project_id }}</span></p>
+                                <p>状态: <span class="status-badge active">活跃</span></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 知识库 -->
+                    <div id="kb-tab" class="tab-content">
+                        <div class="info-section">
+                            <h4>📚 知识库</h4>
+                            <p class="section-desc">上传PDF文件构建知识库，支持智能问答</p>
+                            <div class="panel-toolbar">
+                                <button class="btn btn-primary btn-sm" onclick="showKBUploadModal()">+ 上传PDF</button>
+                                <button class="btn-icon" onclick="loadKBFiles()" title="刷新">↻</button>
+                            </div>
+                            <div id="kb-stats" class="kb-stats">
+                                <span class="stat-item">文档: <b id="kb-doc-count">0</b></span>
+                                <span class="stat-item">页数: <b id="kb-page-count">0</b></span>
+                            </div>
+                            <div id="kb-file-list" class="kb-file-list">
+                                <div class="empty-state">暂无PDF文档</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 版本历史 -->
+                    <div id="versions-tab" class="tab-content">
+                        <div id="version-list">
+                            <div class="empty-state">暂无版本记录</div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <!-- 普通文件上传模态框 -->
+    <div id="upload-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>上传普通文件</h3>
+                <button class="modal-close" onclick="hideUploadModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-area" id="upload-drop-zone">
+                    <div class="upload-icon">📤</div>
+                    <p>拖拽文件到此处，或 <label for="file-input" class="upload-link">点击选择</label></p>
+                    <input type="file" id="file-input" multiple accept=".txt,.md,.json,.py,.js,.html,.css,.jpg,.jpeg,.png,.gif">
+                    <p class="upload-hint">支持: txt, md, json, py, js, html, css, jpg, png, gif</p>
+                </div>
+                <div id="upload-preview" class="upload-preview"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideUploadModal()">取消</button>
+                <button class="btn btn-primary" onclick="uploadFiles()">上传</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 知识库PDF上传模态框 -->
+    <div id="kb-upload-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>上传PDF到知识库</h3>
+                <button class="modal-close" onclick="hideKBUploadModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-area" id="kb-upload-drop-zone">
+                    <div class="upload-icon">📄</div>
+                    <p>拖拽PDF文件到此处，或 <label for="kb-file-input" class="upload-link">点击选择</label></p>
+                    <input type="file" id="kb-file-input" multiple accept=".pdf">
+                    <p class="upload-hint">⚠️ 只允许PDF文件，上传后会自动解析并建立索引</p>
+                </div>
+                <div id="kb-upload-preview" class="upload-preview"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="hideKBUploadModal()">取消</button>
+                <button class="btn btn-primary" onclick="uploadKBFiles()">上传并建立索引</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 变更提案卡片（浮动） -->
+    <div id="proposal-panel" class="proposal-panel hidden">
+        <div class="proposal-header">
+            <h4>变更提案</h4>
+            <button class="btn-close" onclick="hideProposal()">&times;</button>
+        </div>
+        <div class="proposal-body">
+            <div class="proposal-file">
+                <span class="file-icon">📝</span>
+                <span id="proposal-filename" class="filename">file.md</span>
+                <span id="proposal-action" class="action-tag create">创建</span>
+            </div>
+            <div id="proposal-diff" class="proposal-diff">
+                <!-- diff 预览 -->
+            </div>
+        </div>
+        <div class="proposal-footer">
+            <button class="btn btn-danger" onclick="rejectProposal()">拒绝</button>
+            <button class="btn btn-success" onclick="applyProposal()">应用</button>
+        </div>
+    </div>
+
+    <script>
+        // 项目ID
+        const PROJECT_ID = '{{ project_id }}';
+    </script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/project.js') }}"></script>
+</body>
+</html>

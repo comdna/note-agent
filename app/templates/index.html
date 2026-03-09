@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Note Agent - 智能笔记系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>📚 Note Agent</h2>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/" class="nav-item active">
+                    <span class="icon">🏠</span>
+                    <span>项目列表</span>
+                </a>
+            </nav>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content full-width">
+            <header class="content-header">
+                <h1>我的项目</h1>
+                <button class="btn btn-primary" onclick="showCreateProjectModal()">
+                    + 新建项目
+                </button>
+            </header>
+
+            <div class="content-body">
+                <div id="projects-grid" class="projects-grid">
+                    <!-- 项目卡片将通过 JS 动态加载 -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 创建项目模态框 -->
+    <div id="create-project-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>新建项目</h3>
+                <span class="close" onclick="closeCreateProjectModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>项目名称</label>
+                    <input type="text" id="new-project-name" placeholder="输入项目名称">
+                </div>
+                <div class="form-group">
+                    <label>项目描述</label>
+                    <textarea id="new-project-description" placeholder="输入项目描述（可选）"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeCreateProjectModal()">取消</button>
+                <button class="btn btn-primary" onclick="createProject()">创建</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        // 加载项目列表
+        loadProjects();
+    </script>
+</body>
+</html>
