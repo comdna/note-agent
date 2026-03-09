@@ -60,6 +60,7 @@ GLOSSARY_KEYWORDS = ["glossary"]
 class AgentState(TypedDict, total=False):
     query: str
     project_id: str
+    history: List[Dict[str, Any]]
     decision: Dict[str, Any]
     tool_result: Dict[str, Any]
     tool_rounds: int
@@ -96,8 +97,13 @@ def _clean_json(text: str) -> str:
     return text
 
 
-def decide_tool(query: str, tool_steps: Optional[List[Dict[str, Any]]] = None) -> Optional[Dict[str, Any]]:
+def decide_tool(
+    query: str,
+    tool_steps: Optional[List[Dict[str, Any]]] = None,
+    history: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[Dict[str, Any]]:
     previous_steps = tool_steps or []
+    recent_history = history or []
     system_prompt = (
         "You are a tool selector. Choose an appropriate tool for the user query, "
         "or respond directly. You can do multiple tool calls if needed.\\n\\n"
@@ -109,6 +115,7 @@ def decide_tool(query: str, tool_steps: Optional[List[Dict[str, Any]]] = None) -
     )
     user_prompt = (
         f"User query: {query}\\n\\n"
+        f"Recent chat history (if any): {json.dumps(recent_history, ensure_ascii=False)}\\n\\n"
         f"Previous tool steps (if any): {json.dumps(previous_steps, ensure_ascii=False)}"
     )
 
@@ -390,7 +397,7 @@ def _search_web(query: str, num_results: int = 5):
 
 def _decide_node(state: AgentState) -> AgentState:
     steps = state.get('steps', [])
-    decision = decide_tool(state['query'], steps)
+    decision = decide_tool(state['query'], steps, state.get('history', []))
     if decision:
         if decision.get('action') == 'tool' and state.get('tool_rounds', 0) >= MAX_TOOL_ROUNDS:
             last_result = state.get('tool_result') or {}
@@ -459,7 +466,7 @@ def _get_graph():
     return _graph
 
 
-def run_tool_call(project_id: str, query: str) -> Optional[Dict[str, Any]]:
+def run_tool_call(project_id: str, query: str, history: Optional[List[Dict[str, Any]]] = None) -> Optional[Dict[str, Any]]:
     graph = _get_graph()
-    result = graph.invoke({'project_id': project_id, 'query': query})
+    result = graph.invoke({'project_id': project_id, 'query': query, 'history': history or []})
     return result.get('final') if isinstance(result, dict) else None

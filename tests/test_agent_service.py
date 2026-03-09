@@ -208,6 +208,20 @@ class AgentServiceTests(unittest.TestCase):
         self.assertEqual(tool_execute.call_count, agent_service.MAX_TOOL_ROUNDS)
         self.assertEqual(len(result["steps"]), agent_service.MAX_TOOL_ROUNDS)
 
+    def test_run_tool_call_passes_chat_history(self):
+        history = [
+            {"role": "user", "content": "前文问题"},
+            {"role": "assistant", "content": "前文回答"},
+        ]
+
+        with patch("app.services.agent_service.decide_tool") as decide_tool:
+            decide_tool.return_value = {"action": "final", "response": "ok"}
+            result = agent_service.run_tool_call("proj1", "当前问题", history)
+
+        self.assertEqual(result["content"], "ok")
+        first_call_args = decide_tool.call_args_list[0][0]
+        self.assertEqual(first_call_args[2], history)
+
 
 if __name__ == "__main__":
     unittest.main()

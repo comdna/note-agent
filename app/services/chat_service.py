@@ -6,6 +6,14 @@ from typing import Dict, List, Optional
 from app.services import project_service, file_service, kb_service, llm_service, agent_service
 
 DATA_DIR = None
+CHAT_MEMORY_ROUNDS = 5
+CHAT_MEMORY_MESSAGES = CHAT_MEMORY_ROUNDS * 2
+
+
+def _get_recent_history(messages: Optional[List[Dict]]) -> List[Dict]:
+    if not messages:
+        return []
+    return messages[-CHAT_MEMORY_MESSAGES:]
 
 def init_data_dir(data_dir):
     global DATA_DIR
@@ -46,7 +54,7 @@ def has_kb_keywords(content: str) -> bool:
 
     history_text = ""
     if history:
-        for msg in history[-4:]:
+        for msg in history[-CHAT_MEMORY_MESSAGES:]:
             role = "user" if msg.get('role') == 'user' else "assistant"
             history_text += f"{role}: {msg.get('content', '')[:100]}...\n"
 
@@ -330,7 +338,7 @@ def analyze_intent_with_llm(content: str, history: list = None) -> dict:
 
     history_text = ""
     if history:
-        for msg in history[-4:]:
+        for msg in history[-CHAT_MEMORY_MESSAGES:]:
             role = "user" if msg.get('role') == 'user' else "assistant"
             history_text += f"{role}: {msg.get('content', '')[:100]}...\n"
 
@@ -471,7 +479,7 @@ def analyze_intent_with_llm(content: str, history: list = None) -> dict:
     # 构建历史上下文
     history_text = ""
     if history and len(history) > 0:
-        recent_history = history[-4:]  # 最近2轮对话
+        recent_history = history[-CHAT_MEMORY_MESSAGES:]
         for msg in recent_history:
             role = "用户" if msg.get('role') == 'user' else "助手"
             history_text += f"{role}: {msg.get('content', '')[:100]}...\n"
@@ -616,9 +624,9 @@ def send_message(project_id, chat_id, content, use_web=False, background_file_id
     chat['messages'].append(user_message)
 
     # ????????????
-    history = chat.get('messages', [])[-6:]
+    history = _get_recent_history(chat.get('messages', []))
 
-    tool_response = agent_service.run_tool_call(project_id, content)
+    tool_response = agent_service.run_tool_call(project_id, content, history)
     if tool_response:
         response = tool_response
     else:
@@ -705,9 +713,9 @@ def send_message_stream(project_id, chat_id, content, use_web=False, background_
     yield {'type': 'start'}
     
     # 获取历史对话
-    history = chat.get('messages', [])[-6:]
+    history = _get_recent_history(chat.get('messages', []))
 
-    tool_response = agent_service.run_tool_call(project_id, content)
+    tool_response = agent_service.run_tool_call(project_id, content, history)
     if tool_response:
         yield {'type': 'delta', 'content': tool_response.get('content', '')}
         if tool_response.get('steps'):
@@ -1030,7 +1038,7 @@ def generate_response(project_id, chat, content, intent, use_web, intent_result=
     }
     
     # 获取历史对话
-    history = chat.get('messages', [])[-6:]  # 最近3轮对话
+    history = _get_recent_history(chat.get('messages', []))
 
     background_context, background_citations, valid_background_ids = _build_background_context(
         project_id,
